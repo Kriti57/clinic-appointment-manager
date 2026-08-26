@@ -4,7 +4,7 @@ import DoctorProfile from "../models/DoctorProfile.js";
 import SlotHold from "../models/SlotHold.js";
 import User from "../models/User.js";
 import { generatePreVisitSummary, generatePostVisitSummary } from "../services/llmService.js";
-import { sendBookingConfirmationEmails, sendCancellationEmail } from "../services/emailService.js";
+import { sendBookingConfirmationEmails, sendCancellationEmail, sendPostVisitEmail  } from "../services/emailService.js";
 import { createCalendarEvent, deleteCalendarEvent } from "../services/calendarService.js";
 
 // STEP 1 of booking: patient selects a slot -> we place a short hold on it (5 min TTL)
@@ -159,13 +159,21 @@ export const submitVisitNotes = async (req, res, next) => {
     };
 
     await appointment.save();
+
+    // Best effort - a failed email here should not undo the saved notes/summary
+    try {
+      await sendPostVisitEmail(appointment, appointment.patient);
+    } catch (e) {
+      console.error("Post-visit summary email failed:", e.message);
+    }
+
     res.json({ appointment });
   } catch (err) {
     next(err);
   }
 };
 
-// Cancel an appointment (by patient or doctor/admin)
+// Cancel an appointment(by patient or doctor/admin)
 export const cancelAppointment = async (req, res, next) => {
   try {
     const appointment = await Appointment.findById(req.params.id).populate("patient");

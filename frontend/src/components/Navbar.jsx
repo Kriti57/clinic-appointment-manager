@@ -19,6 +19,7 @@ export default function Navbar() {
         {user && user.role === "patient" && <Link to="/patient">Dashboard</Link>}
         {user && user.role === "doctor" && <Link to="/doctor">Dashboard</Link>}
         {user && user.role === "admin" && <Link to="/admin">Dashboard</Link>}
+        {user && <Link to="/settings">Settings</Link>}
         {user && <button onClick={handleLogout}>Logout ({user.name})</button>}
       </div>
     </nav>
