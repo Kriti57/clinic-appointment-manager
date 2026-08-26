@@ -79,5 +79,3 @@ Google Calendar sync is optional per-user (requires OAuth consent) and is design
 degrade gracefully: if a user hasn't connected their calendar, `createCalendarEvent`
 simply returns `null` rather than throwing, so the rest of the booking flow proceeds
 unaffected.
-
-*(~780 words)*
