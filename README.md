@@ -5,6 +5,20 @@ an admin. Patients book appointments and share symptoms in advance; an LLM gener
 a pre-visit summary for the doctor and a patient-friendly post-visit summary; both
 sides are kept informed via email and Google Calendar.
 
+## Live Deployment
+
+- **Live app:** https://clinic-frontend-4fgf.onrender.com
+- **Backend API:** https://clinic-backend-5qb4.onrender.com/api
+- **Admin login:** `admin@clinic.com` / `admin123`
+
+> Both services run on Render's free tier. The backend spins down after ~15 minutes
+> of inactivity and takes 30-60 seconds to wake up on the first request after a gap
+> — if the live app feels slow to load initially, that's why, not a bug.
+
+Deployed as two separate Render services from this same repo:
+- **Backend** — Web Service, root directory `backend`, build `npm install`, start `npm start`
+- **Frontend** — Static Site, root directory `frontend`, build `npm install && npm run build`, publish directory `dist`, with a Rewrite rule (`/*` → `/index.html`) configured under the site's Redirects/Rewrites settings so client-side routes (e.g. `/patient`, `/settings`) work on direct load/refresh.
+
 ## Tech Stack
 
 - **Frontend:** React 18 (Vite), React Router, Axios
