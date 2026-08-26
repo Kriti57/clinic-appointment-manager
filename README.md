@@ -11,7 +11,7 @@ sides are kept informed via email and Google Calendar.
 - **Backend:** Node.js, Express
 - **Database:** MongoDB (Atlas), Mongoose
 - **Auth:** JWT, bcrypt password hashing, role-based middleware (patient / doctor / admin)
-- **LLM:** Groq API (`llama-3.3-70b-versatile`)
+- **LLM:** Groq API (`openai/gpt-oss-20b`)
 - **Email:** Nodemailer (Gmail SMTP)
 - **Calendar:** Google Calendar API (OAuth 2.0)
 - **Background jobs:** node-cron (medication reminders, email retry)
