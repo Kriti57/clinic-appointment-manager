@@ -4,8 +4,32 @@ import DoctorProfile from "../models/DoctorProfile.js";
 import SlotHold from "../models/SlotHold.js";
 import User from "../models/User.js";
 import { generatePreVisitSummary, generatePostVisitSummary } from "../services/llmService.js";
-import { sendBookingConfirmationEmails, sendCancellationEmail, sendPostVisitEmail  } from "../services/emailService.js";
-import { createCalendarEvent, deleteCalendarEvent } from "../services/calendarService.js";
+import { sendBookingEmail, sendPostVisitEmail } from "../services/emailService.js";
+import { createCalendarEvent } from "../services/calendarService.js";
+import { cancelAppointmentAndNotify } from "../services/cancellationService.js";
+
+// Ownership check (prevents IDOR): is this user a party to this appointment?
+// - admin: always allowed
+// - patient: only if they are the appointment's patient
+// - doctor: only if the appointment's doctor profile belongs to them
+// Works whether `patient` / `doctor` are populated documents or raw ObjectIds.
+const canAccessAppointment = async (user, appointment) => {
+  if (user.role === "admin") return true;
+
+  if (user.role === "patient") {
+    const patientId = appointment.patient?._id ?? appointment.patient;
+    return String(patientId) === String(user._id);
+  }
+
+  if (user.role === "doctor") {
+    const profile = await DoctorProfile.findOne({ user: user._id }).select("_id");
+    if (!profile) return false;
+    const doctorId = appointment.doctor?._id ?? appointment.doctor;
+    return String(doctorId) === String(profile._id);
+  }
+
+  return false;
+};
 
 // STEP 1 of booking: patient selects a slot -> we place a short hold on it (5 min TTL)
 // so it doesn't show as available to other patients while this one fills the symptom form.
@@ -17,7 +41,7 @@ export const holdSlot = async (req, res, next) => {
       doctor: doctorId,
       date,
       slotTime,
-      status: { $in: ["pending", "confirmed", "completed"] },
+      status: { $in: ["confirmed", "completed"] },
     });
     if (alreadyBooked) return res.status(409).json({ message: "This slot is already booked." });
 
@@ -90,19 +114,23 @@ export const bookAppointment = async (req, res, next) => {
     const doctorProfile = await DoctorProfile.findById(doctorId).populate("user");
     const patientUser = await User.findById(req.user._id);
 
-    // Email (best effort, tracked for retry)
-    try {
-      await sendBookingConfirmationEmails(createdAppointment, patientUser, doctorProfile.user);
-      createdAppointment.notifications.push(
-        { type: "booking_confirmation", recipient: "patient", status: "sent", attempts: 1, lastAttemptAt: new Date() },
-        { type: "booking_confirmation", recipient: "doctor", status: "sent", attempts: 1, lastAttemptAt: new Date() }
-      );
-    } catch (e) {
-      console.error("Booking confirmation email failed:", e.message);
-      createdAppointment.notifications.push(
-        { type: "booking_confirmation", recipient: "patient", status: "failed", attempts: 1, lastAttemptAt: new Date() },
-        { type: "booking_confirmation", recipient: "doctor", status: "failed", attempts: 1, lastAttemptAt: new Date() }
-      );
+    // Email (best effort). One attempt and one record per recipient, so the retry job
+    // re-sends only to whoever actually failed.
+    for (const recipient of ["patient", "doctor"]) {
+      let status = "sent";
+      try {
+        await sendBookingEmail(recipient, createdAppointment, patientUser, doctorProfile.user);
+      } catch (e) {
+        console.error(`Booking confirmation email to ${recipient} failed:`, e.message);
+        status = "failed";
+      }
+      createdAppointment.notifications.push({
+        type: "booking_confirmation",
+        recipient,
+        status,
+        attempts: 1,
+        lastAttemptAt: new Date(),
+      });
     }
     await createdAppointment.save();
 
@@ -146,6 +174,9 @@ export const submitVisitNotes = async (req, res, next) => {
     const { doctorNotes, prescription } = req.body;
     const appointment = await Appointment.findById(req.params.id).populate("patient");
     if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+    if (!(await canAccessAppointment(req.user, appointment))) {
+      return res.status(403).json({ message: "You do not have access to this appointment." });
+    }
 
     appointment.doctorNotes = doctorNotes;
     appointment.prescription = prescription || [];
@@ -178,21 +209,15 @@ export const cancelAppointment = async (req, res, next) => {
   try {
     const appointment = await Appointment.findById(req.params.id).populate("patient");
     if (!appointment) return res.status(404).json({ message: "Appointment not found." });
-
-    appointment.status = "cancelled";
-    appointment.cancelReason = req.body.reason || "Cancelled by user";
-    await appointment.save();
-
-    try {
-      await sendCancellationEmail(appointment);
-    } catch (e) {
-      console.error("Cancellation email failed:", e.message);
+    if (!(await canAccessAppointment(req.user, appointment))) {
+      return res.status(403).json({ message: "You do not have access to this appointment." });
     }
-    try {
-      if (appointment.googleEventId) await deleteCalendarEvent(appointment.patient, appointment.googleEventId);
-    } catch (e) {
-      console.error("Calendar event deletion failed:", e.message);
+
+    if (appointment.status !== "confirmed") {
+      return res.status(409).json({ message: `This appointment is already ${appointment.status.replace("_", " ")}.` });
     }
+
+    await cancelAppointmentAndNotify(appointment, "cancelled", req.body.reason || "Cancelled by user");
 
     res.json({ appointment });
   } catch (err) {
@@ -226,6 +251,9 @@ export const getAppointmentById = async (req, res, next) => {
       .populate("patient", "name email")
       .populate({ path: "doctor", populate: { path: "user", select: "name email" } });
     if (!appointment) return res.status(404).json({ message: "Appointment not found." });
+    if (!(await canAccessAppointment(req.user, appointment))) {
+      return res.status(403).json({ message: "You do not have access to this appointment." });
+    }
     res.json({ appointment });
   } catch (err) {
     next(err);

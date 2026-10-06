@@ -71,28 +71,6 @@ export const createCalendarEvent = async (user, { summary, description, date, sl
   }
 };
 
-export const updateCalendarEvent = async (user, eventId, { date, slotTime, durationMinutes }) => {
-  const client = getClientForUser(user);
-  if (!client || !eventId) return;
-
-  const calendar = google.calendar({ version: "v3", auth: client });
-  const startDateTime = new Date(`${date}T${slotTime}:00`);
-  const endDateTime = new Date(startDateTime.getTime() + durationMinutes * 60000);
-
-  try {
-    await calendar.events.patch({
-      calendarId: "primary",
-      eventId,
-      requestBody: {
-        start: { dateTime: startDateTime.toISOString() },
-        end: { dateTime: endDateTime.toISOString() },
-      },
-    });
-  } catch (err) {
-    console.error(`Calendar event update failed:`, err.message);
-  }
-};
-
 export const deleteCalendarEvent = async (user, eventId) => {
   const client = getClientForUser(user);
   if (!client || !eventId) return;

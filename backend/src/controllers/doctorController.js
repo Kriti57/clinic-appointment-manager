@@ -2,8 +2,7 @@ import User from "../models/User.js";
 import DoctorProfile from "../models/DoctorProfile.js";
 import Appointment from "../models/Appointment.js";
 import { getAvailableSlots } from "../services/slotService.js";
-import { sendCancellationEmail } from "../services/emailService.js";
-import { deleteCalendarEvent } from "../services/calendarService.js";
+import { cancelAppointmentAndNotify } from "../services/cancellationService.js";
 
 // ADMIN: create a doctor (creates both the User login and the DoctorProfile)
 export const createDoctor = async (req, res, next) => {
@@ -61,25 +60,11 @@ export const addLeaveDay = async (req, res, next) => {
     const affected = await Appointment.find({
       doctor: profile._id,
       date,
-      status: { $in: ["pending", "confirmed"] },
+      status: "confirmed",
     }).populate("patient");
 
     for (const appt of affected) {
-      appt.status = "leave_cancelled";
-      appt.cancelReason = `Doctor is on leave: ${reason || "unavailable"}`;
-      await appt.save();
-
-      // Best-effort: don't let a notification failure block the leave update
-      try {
-        await sendCancellationEmail(appt);
-      } catch (e) {
-        console.error("Failed to send leave-cancellation email:", e.message);
-      }
-      try {
-        if (appt.googleEventId) await deleteCalendarEvent(appt.patient, appt.googleEventId);
-      } catch (e) {
-        console.error("Failed to delete patient calendar event:", e.message);
-      }
+      await cancelAppointmentAndNotify(appt, "leave_cancelled", `Doctor is on leave: ${reason || "unavailable"}`);
     }
 
     res.json({ profile, affectedAppointments: affected.length });
@@ -93,7 +78,10 @@ export const listDoctors = async (req, res, next) => {
   try {
     const filter = {};
     if (req.query.specialisation) {
-      filter.specialisation = { $regex: req.query.specialisation, $options: "i" };
+      // Escape regex metacharacters so the search is a plain "contains" match, not a
+      // user-supplied pattern (prevents regex injection / catastrophic-backtracking DoS).
+      const escaped = req.query.specialisation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.specialisation = { $regex: escaped, $options: "i" };
     }
     const profiles = await DoctorProfile.find(filter).populate("user", "name email phone");
     res.json({ doctors: profiles });

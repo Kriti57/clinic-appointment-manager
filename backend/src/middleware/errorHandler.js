@@ -12,7 +12,11 @@ export const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ message: err.message });
   }
 
-  res.status(err.statusCode || 500).json({
-    message: err.message || "Something went wrong on the server.",
-  });
+  // Don't leak internals (stack hints, DB errors) on server faults in production.
+  const status = err.statusCode || 500;
+  const message =
+    status >= 500 && process.env.NODE_ENV === "production"
+      ? "Something went wrong on the server."
+      : err.message || "Something went wrong on the server.";
+  res.status(status).json({ message });
 };

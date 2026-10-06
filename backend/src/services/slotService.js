@@ -41,7 +41,7 @@ export const getAvailableSlots = async (doctorProfile, dateStr) => {
     Appointment.find({
       doctor: doctorProfile._id,
       date: dateStr,
-      status: { $in: ["pending", "confirmed", "completed"] },
+      status: { $in: ["confirmed", "completed"] },
     }).distinct("slotTime"),
     SlotHold.find({ doctor: doctorProfile._id, date: dateStr }).distinct("slotTime"),
   ]);

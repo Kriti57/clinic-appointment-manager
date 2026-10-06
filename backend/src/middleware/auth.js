@@ -17,6 +17,12 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: "User no longer exists." });
     }
 
+    // Revoked? Tokens issued before the last "log out everywhere" carry an older version.
+    // Tokens from before this feature have no `tv`, so treat missing as 0.
+    if ((decoded.tv ?? 0) !== (user.tokenVersion ?? 0)) {
+      return res.status(401).json({ message: "Session expired. Please log in again." });
+    }
+
     req.user = user;
     next();
   } catch (err) {

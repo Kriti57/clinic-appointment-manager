@@ -24,11 +24,21 @@ const safeGroqCall = async (systemPrompt, userPrompt, fallback) => {
       response_format: { type: "json_object" },
     });
 
-    const raw = completion.choices[0]?.message?.content;
-    const parsed = JSON.parse(raw);
-    return { ...parsed, failed: false };
+    const choice = completion.choices[0];
+    const raw = choice?.message?.content;
+    try {
+      const parsed = JSON.parse(raw);
+      return { ...parsed, failed: false };
+    } catch (parseErr) {
+      console.error(
+        `Groq reply was not valid JSON | model=${MODEL} finish_reason=${choice?.finish_reason} ` +
+          `length=${raw?.length ?? 0} parseError=${parseErr.message}`
+      );
+      return { ...fallback, failed: true };
+    }
   } catch (err) {
-    console.error("Groq LLM call failed:", err.message);
+    // API-level failure: bad key, rate limit, network, unknown model...
+    console.error(`Groq API call failed | model=${MODEL} status=${err.status ?? "n/a"} message=${err.message}`);
     return { ...fallback, failed: true };
   }
 };

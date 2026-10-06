@@ -9,6 +9,9 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["patient", "doctor", "admin"], required: true, default: "patient" },
     phone: { type: String, trim: true },
 
+    // Incremented to invalidate all previously issued JWTs for this user
+    tokenVersion: { type: Number, default: 0 },
+
     // Google Calendar OAuth tokens (per-user, so each person's calendar is their own)
     googleTokens: {
       accessToken: { type: String, default: null },
@@ -35,6 +38,7 @@ userSchema.set("toJSON", {
   transform: (_doc, ret) => {
     delete ret.password;
     delete ret.googleTokens;
+    delete ret.tokenVersion;
     return ret;
   },
 });

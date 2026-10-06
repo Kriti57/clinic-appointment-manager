@@ -9,7 +9,6 @@ const getTransporter = () =>
     },
   });
 
-// Generic sender. Always throws on failure - callers decide how to record/retry it.
 const sendMail = async (to, subject, html) => {
   await getTransporter().sendMail({
     from: `"Clinic Appointments" <${process.env.EMAIL_USER}>`,
@@ -19,30 +18,22 @@ const sendMail = async (to, subject, html) => {
   });
 };
 
-export const sendBookingConfirmationEmails = async (appointment, patientUser, doctorUser) => {
-  await sendMail(
-    patientUser.email,
-    "Appointment Confirmed",
-    `<p>Hi ${patientUser.name},</p>
+export const sendBookingEmail = async (recipient, appointment, patientUser, doctorUser) => {
+  if (recipient === "patient") {
+    return sendMail(
+      patientUser.email,
+      "Appointment Confirmed",
+      `<p>Hi ${patientUser.name},</p>
      <p>Your appointment with Dr. ${doctorUser.name} is confirmed for <b>${appointment.date} at ${appointment.slotTime}</b>.</p>
      <p>You'll receive a reminder closer to the date.</p>`
-  );
-
-  await sendMail(
+    );
+  }
+  return sendMail(
     doctorUser.email,
     "New Appointment Booked",
     `<p>Hi Dr. ${doctorUser.name},</p>
      <p>A new appointment has been booked by ${patientUser.name} on <b>${appointment.date} at ${appointment.slotTime}</b>.</p>
      <p>A pre-visit AI symptom summary will be attached to the appointment before the visit.</p>`
-  );
-};
-
-export const sendReminderEmail = async (appointment, patientUser) => {
-  await sendMail(
-    patientUser.email,
-    "Appointment Reminder",
-    `<p>Hi ${patientUser.name},</p>
-     <p>This is a reminder for your appointment on <b>${appointment.date} at ${appointment.slotTime}</b>.</p>`
   );
 };
 

@@ -17,7 +17,7 @@ export const register = async (req, res, next) => {
     }
 
     const user = await User.create({ name, email, password, phone, role: "patient" });
-    const token = signToken(user._id, user.role);
+    const token = signToken(user);
 
     res.status(201).json({ token, user });
   } catch (err) {
@@ -37,7 +37,7 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
-    const token = signToken(user._id, user.role);
+    const token = signToken(user);
 
     // If this user is a doctor, include their doctor profile id for convenience
     let doctorProfileId = null;
@@ -55,6 +55,18 @@ export const login = async (req, res, next) => {
 export const getMe = async (req, res, next) => {
   try {
     res.json({ user: req.user });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Log out everywhere: bump the version so every existing token for this user stops working,
+// and hand back a fresh token so the current device stays signed in.
+export const logoutAll = async (req, res, next) => {
+  try {
+    req.user.tokenVersion = (req.user.tokenVersion ?? 0) + 1;
+    await req.user.save();
+    res.json({ message: "Logged out of all devices.", token: signToken(req.user) });
   } catch (err) {
     next(err);
   }

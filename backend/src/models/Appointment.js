@@ -10,7 +10,7 @@ const appointmentSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "confirmed", "cancelled", "completed", "leave_cancelled"],
+      enum: ["confirmed", "cancelled", "completed", "leave_cancelled"],
       default: "confirmed",
     },
 
@@ -48,9 +48,9 @@ const appointmentSchema = new mongoose.Schema(
     // --- Notification tracking (for retry logic) ---
     notifications: [
       {
-        type: { type: String, enum: ["booking_confirmation", "reminder", "cancellation", "medication_reminder"] },
+        type: { type: String, enum: ["booking_confirmation", "cancellation"] },
         recipient: { type: String, enum: ["patient", "doctor"] },
-        status: { type: String, enum: ["sent", "failed", "pending"], default: "pending" },
+        status: { type: String, enum: ["sent", "failed"], required: true },
         attempts: { type: Number, default: 0 },
         lastAttemptAt: { type: Date, default: null },
       },
@@ -61,9 +61,6 @@ const appointmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// THE critical index: makes it physically impossible for two confirmed appointments
-// to exist for the same doctor+date+slot at the database level, regardless of
-// application-level race conditions. Partial filter so cancelled slots free up.
 appointmentSchema.index(
   { doctor: 1, date: 1, slotTime: 1 },
   {
